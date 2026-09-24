@@ -1,15 +1,15 @@
 """
-SVM NHỊ PHÂN: TIẾNG VIỆT vs TIẾNG H'MÔNG - TRỌNG TÂM TOÁN HỌC
+DEMO SVM NHỊ PHÂN: TIẾNG VIỆT (+1) vs TIẾNG H'MÔNG (-1)   (bản log gọn)
 
-Bài toán: phân loại 1 câu là TIẾNG VIỆT (+1) hay TIẾNG H'MÔNG (-1).
-Đây là bài toán con thực tế có logic "nếu confidence thấp -> mặc định về tiếng Việt" - tức bài toán nhị
-phân "có phải tiếng Việt hay không" chính là lõi quan trọng nhất
-trong hệ thống nhận diện ngôn ngữ của bạn.
+Chứng minh bản chất SVM bằng số liệu, đối chiếu code tự viết với scikit-learn:
+  - Ràng buộc Dual + điều kiện KKT + support vector thưa
+  - Đối ngẫu mạnh: giá trị Primal = giá trị Dual
+  - Nghiệm của code tự viết = nghiệm của thư viện
+  - Kernel trick: linear thất bại, RBF tách được
+Cần: simple_svm.py và lang_dataset.py
 """
-
 import time
 import numpy as np
-
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC, LinearSVC
@@ -18,224 +18,121 @@ from simple_svm import SimpleSVM_SMO, LinearSVM_Primal
 from lang_dataset import make_vi_sentence, make_hmong_sentence
 
 np.random.seed(42)
-
-
-# ================================================================
-# MINI TEST FRAMEWORK
-# ================================================================
 _results = []
 
-def check(name, condition, detail=""):
-    status = "PASS" if condition else "FAIL"
-    _results.append((name, status))
-    print(f"  [{status}] {name}" + (f"  ({detail})" if detail else ""))
-    return condition
 
-def section(title):
-    print("\n" + "=" * 78)
-    print(title)
-    print("=" * 78)
-
-def cosine_sim(a, b):
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+def header(t):
+    print(f"\n{'=' * 70}\n{t}\n{'=' * 70}")
 
 
-# ================================================================
-# 1) TẠO DỮ LIỆU: tiếng Việt (+1) vs H'Mông (-1), LƯỢNG LỚN
-# ================================================================
-section("BƯỚC 1 - TẠO DỮ LIỆU (vi vs hmong, mô phỏng)")
-
-N_PER_CLASS = 400
-# 400 câu/lớp = 800 câu tổng - đã kiểm tra chạy hội tụ đầy đủ trong
-# ~22s. Có thể tăng lên nếu bạn muốn nhiều dữ liệu hơn, nhưng thời
-# gian chạy SMO manual code sẽ tăng nhanh (gần bậc 2 theo n, đã phân
-# tích ở phần "độ phức tạp" trước đó).
-
-vi_texts = [make_vi_sentence() for _ in range(N_PER_CLASS)]
-hmn_texts = [make_hmong_sentence() for _ in range(N_PER_CLASS)]
-texts = vi_texts + hmn_texts
-labels = np.array([1] * N_PER_CLASS + [-1] * N_PER_CLASS, dtype=float)
-
-print(f"Tổng số câu: {len(texts)} ({N_PER_CLASS} tiếng Việt + {N_PER_CLASS} H'Mông)")
-print(f"Ví dụ câu tiếng Việt : {vi_texts[0]}")
-print(f"Ví dụ câu H'Mông     : {hmn_texts[0]}")
-
-texts_train, texts_test, y_train, y_test = train_test_split(
-    texts, labels, test_size=0.3, random_state=42, stratify=labels
-)
-
-# --- TF-IDF ký tự (char n-gram) - GIỐNG kiến trúc trainer.py gốc ---
-# max_features giảm từ 50000 (bản gốc) xuống 150 vì SimpleSVM_SMO tự
-# viết cần ma trận kernel O(n^2) và KHÔNG hỗ trợ ma trận thưa (sparse)
-# như scikit-learn - đây là giới hạn thực tế cần nhớ khi đọc kết quả.
-tfidf = TfidfVectorizer(analyzer="char", ngram_range=(2, 4),
-                          max_features=150, sublinear_tf=True)
-X_train = tfidf.fit_transform(texts_train).toarray()
-X_test = tfidf.transform(texts_test).toarray()
-
-print(f"\nTrain: {X_train.shape[0]} mẫu | Test: {X_test.shape[0]} mẫu | "
-      f"Đặc trưng: {X_train.shape[1]} chiều")
+def check(name, ok, detail=""):
+    _results.append(ok)
+    print(f"  [{'PASS' if ok else 'FAIL'}] {name}  ({detail})")
 
 
-# ================================================================
-# 2) HUẤN LUYỆN 4 MÔ HÌNH: 2 manual code + 2 scikit-learn
-# ================================================================
-section("BƯỚC 2 - HUẤN LUYỆN (Dual manual code / Primal manual code / scikit-learn)")
-
-# --- 2.1 Dual (SMO) manual code ---
-t0 = time.time()
-svm_dual = SimpleSVM_SMO(C=1.0, kernel="linear", max_passes=10)
-svm_dual.fit(X_train, y_train)
-t_dual = time.time() - t0
-print(f"manual code - Dual/SMO       : fit_time={t_dual:8.4f}s  "
-      f"| SV={len(svm_dual.support_)}/{len(y_train)}")
-
-# --- 2.2 Primal (Gradient Descent trên hinge loss) manual code ---
-t0 = time.time()
-svm_primal = LinearSVM_Primal(C=1.0, lr=0.001, n_iters=3000)
-svm_primal.fit(X_train, y_train)
-t_primal = time.time() - t0
-print(f"manual code - Primal/GD      : fit_time={t_primal:8.4f}s")
-
-# --- 2.3 scikit-learn SVC (libsvm, kernel linear) - tương đương lý
-#     thuyết CHÍNH XÁC NHẤT với Dual/SMO manual code (cùng giải 1 bài
-#     toán QP hinge-loss, không phải squared-hinge như LinearSVC) ---
-t0 = time.time()
-sk_svc = SVC(C=1.0, kernel="linear")
-sk_svc.fit(X_train, y_train)
-t_svc = time.time() - t0
-print(f"scikit-learn - SVC(linear): fit_time={t_svc:8.4f}s  "
-      f"| SV={len(sk_svc.support_)}/{len(y_train)}")
-
-# --- 2.4 scikit-learn LinearSVC (liblinear) - ĐÚNG thuật toán mà
-#     build_language_pipeline() trong trainer.py gốc của bạn dùng ---
-t0 = time.time()
-sk_linsvc = LinearSVC(max_iter=2000, random_state=42, class_weight="balanced")
-sk_linsvc.fit(X_train, y_train)
-t_linsvc = time.time() - t0
-print(f"scikit-learn - LinearSVC  : fit_time={t_linsvc:8.4f}s")
+def cosine(a, b):
+    return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
-# ================================================================
-# 3) BỘ TEST LOGIC TOÁN HỌC (áp dụng TRỰC TIẾP trên dữ liệu vi/hmong)
-# ================================================================
-section("BƯỚC 3 - KIỂM CHỨNG CÁC TÍNH CHẤT TOÁN HỌC")
+def primal_obj(w, b, X, y, C):   # P = 1/2||w||^2 + C*sum hinge
+    return 0.5 * w @ w + C * np.maximum(0, 1 - y * (X @ w + b)).sum()
 
-print("\n--- Test 3.1: Độ chính xác (mọi mô hình nên gần bằng nhau,"
-      " vì cùng giải 1 bài toán tối ưu lồi) ---")
-for name, model, is_custom in [
-    ("manual code - Dual/SMO", svm_dual, True),
-    ("manual code - Primal/GD", svm_primal, True),
-    ("scikit-learn - SVC(linear)", sk_svc, False),
-    ("scikit-learn - LinearSVC", sk_linsvc, False),
+
+def dual_obj(alpha, w):          # D = sum(alpha) - 1/2||w||^2
+    return alpha.sum() - 0.5 * w @ w
+
+
+# ---------------------------------------------------------------- 1. DỮ LIỆU
+header("1) DỮ LIỆU")
+N = 400
+texts = [make_vi_sentence() for _ in range(N)] + [make_hmong_sentence() for _ in range(N)]
+labels = np.array([1] * N + [-1] * N, dtype=float)
+tr, te, y_train, y_test = train_test_split(texts, labels, test_size=0.3,
+                                           random_state=42, stratify=labels)
+# 150 chiều vì SMO tự viết dùng ma trận kernel n x n, không hỗ trợ sparse
+tfidf = TfidfVectorizer(analyzer="char", ngram_range=(2, 4), max_features=150, sublinear_tf=True)
+X_train, X_test = tfidf.fit_transform(tr).toarray(), tfidf.transform(te).toarray()
+n = len(y_train)
+print(f"  {len(texts)} câu (vi/hmong = {N}/{N}) -> train {n}, test {len(y_test)}, "
+      f"{X_train.shape[1]} đặc trưng TF-IDF char 2-4gram")
+
+# ---------------------------------------------------------------- 2. SO SÁNH
+header("2) HUẤN LUYỆN & SO SÁNH (C = 1.0)")
+C = 1.0
+models, times = {}, {}
+for name, m in [
+    ("SMO tự viết (dual)", SimpleSVM_SMO(C=C, kernel="linear", max_passes=10)),
+    ("GD tự viết (primal)", LinearSVM_Primal(C=C, lr=0.001, n_iters=3000)),
+    ("sklearn SVC", SVC(C=C, kernel="linear")),
+    ("sklearn LinearSVC", LinearSVC(C=C, max_iter=2000, random_state=42, class_weight="balanced")),
 ]:
-    pred = model.predict(X_test)
-    acc = np.mean(pred == y_test)
-    print(f"  {name:28s}: test accuracy = {acc:.4f}")
+    t0 = time.perf_counter()
+    m.fit(X_train, y_train)
+    models[name], times[name] = m, time.perf_counter() - t0
 
-print("\n--- Test 3.2: Điều kiện KKT (complementary slackness) ---")
-# Với mỗi điểm huấn luyện, alpha_i phải rơi vào đúng 1 trong 3 trường
-# hợp suy ra từ complementary slackness (xem giải thích chi tiết
-# trong svm_math_annotated.py, phần docstring đầu file)
-eps = 0.15
-n_train = len(y_train)
-violations = 0
-for i in range(n_train):
-    fi = svm_dual._decision_raw(i)
-    margin_i = y_train[i] * fi
-    a = svm_dual.alpha[i]
-    if a < 1e-6:
-        ok = margin_i >= 1 - eps
-    elif a > svm_dual.C - 1e-6:
-        ok = margin_i <= 1 + eps
-    else:
-        ok = abs(margin_i - 1) <= eps
-    if not ok:
-        violations += 1
-check("KKT complementary slackness thỏa mãn trên >=90% điểm train",
-      violations <= n_train * 0.10,
-      f"{n_train - violations}/{n_train} điểm thỏa KKT")
-check("Mọi alpha_i nằm trong [0, C]",
-      np.all(svm_dual.alpha >= -1e-9) and np.all(svm_dual.alpha <= svm_dual.C + 1e-9))
+svm, gd, svc, lin = models.values()
+w_svm, b_svm = svm.get_w(), svm.b
+W = {"SMO tự viết (dual)": (w_svm, b_svm),
+     "GD tự viết (primal)": (gd.w, gd.b),
+     "sklearn SVC": (svc.coef_.ravel(), float(svc.intercept_[0])),
+     "sklearn LinearSVC": (lin.coef_.ravel(), float(lin.intercept_[0]))}
+alpha_svc = np.abs(svc.dual_coef_).ravel()
+D_val = {"SMO tự viết (dual)": dual_obj(svm.alpha, w_svm),
+         "sklearn SVC": dual_obj(alpha_svc, W["sklearn SVC"][0])}
+n_sv = {"SMO tự viết (dual)": len(svm.support_), "sklearn SVC": len(svc.support_)}
 
-print("\n--- Test 3.3: Tính sparsity (support vector << n) ---")
-n_sv = len(svm_dual.support_)
-check("Số support vector nhỏ hơn 30% tổng số điểm train",
-      n_sv < n_train * 0.3, f"{n_sv}/{n_train} điểm là support vector")
+t_ref = times["sklearn LinearSVC"]   # mốc so sánh tốc độ
+print(f"  {'Mô hình':22s}|{'Fit (s)':>8s} |{'x LinearSVC':>12s} |{'Acc test':>9s} |{'||w||':>7s} |{'Primal P':>9s} |{'Dual D':>8s} |{'#SV':>4s}")
+print("  " + "-" * 91)
+for name, m in models.items():
+    w, b = W[name]
+    d = f"{D_val[name]:8.3f}" if name in D_val else f"{'-':>8s}"
+    sv = f"{n_sv[name]:4d}" if name in n_sv else f"{'-':>4s}"
+    print(f"  {name:22s}|{times[name]:8.3f} |{times[name] / t_ref:11.1f}x |{np.mean(m.predict(X_test) == y_test):9.4f} |"
+          f"{np.linalg.norm(w):7.3f} |{primal_obj(w, b, X_train, y_train, C):9.3f} |{d} |{sv}")
+print("  (LinearSVC tối ưu squared-hinge nên P theo hinge cao hơn - bình thường)")
 
-print("\n--- Test 3.4: Định lý đối ngẫu mạnh (Strong Duality) ---")
-w_dual = svm_dual.get_w()
-w_primal = svm_primal.w
-w_svc = sk_svc.coef_.flatten()
-w_linsvc = sk_linsvc.coef_.flatten()
+# ---------------------------------------------------------------- 3. KIỂM CHỨNG
+header("3) KIỂM CHỨNG")
+alpha, y = svm.alpha, y_train
 
-cos_dp = cosine_sim(w_dual, w_primal)
-cos_ds = cosine_sim(w_dual, w_svc)
-cos_dl = cosine_sim(w_dual, w_linsvc)
+check("Ràng buộc Dual: 0 <= alpha <= C  và  sum(alpha*y) = 0",
+      alpha.min() >= -1e-9 and alpha.max() <= C + 1e-9 and abs(np.sum(alpha * y)) < 1e-6,
+      f"alpha in [{max(alpha.min(), 0):.2g}, {alpha.max():.2g}], sum(alpha*y) = {np.sum(alpha * y):.1e}")
 
-check("w(Dual manual code) và w(Primal manual code) gần như CÙNG HƯỚNG",
-      cos_dp > 0.95, f"cosine similarity = {cos_dp:.4f}")
-check("w(Dual manual code) và w(SVC scikit-learn, cùng bài toán QP hinge-loss)"
-      " gần như CÙNG HƯỚNG",
-      cos_ds > 0.95, f"cosine similarity = {cos_ds:.4f}")
-print(f"  (Tham khảo, không bắt buộc PASS) cos(Dual, LinearSVC) = {cos_dl:.4f}"
-      f" - LinearSVC dùng squared-hinge loss mặc định nên nghiệm có thể"
-      f" khác 1 chút so với hinge loss thuần của SVC/Dual manual code")
+eps, viol = 0.15, 0     # KKT: alpha=0 -> y*f>=1 ; 0<alpha<C -> y*f=1 ; alpha=C -> y*f<=1
+for i in range(n):
+    m = y[i] * svm._decision_raw(i)
+    ok = (m >= 1 - eps) if alpha[i] < 1e-6 else (m <= 1 + eps) if alpha[i] > C - 1e-6 else abs(m - 1) <= eps
+    viol += not ok
+check("KKT thỏa trên >= 90% điểm train", viol <= 0.1 * n, f"{n - viol}/{n} điểm")
 
+check("Thưa: support vector < 30% số điểm", len(svm.support_) < 0.3 * n,
+      f"{len(svm.support_)}/{n} = {len(svm.support_) / n:.1%}")
 
-# ================================================================
-# 4) KERNEL TRICK: minh họa TÁCH BIỆT bằng dữ liệu hình học đơn giản
-# ================================================================
-section("BƯỚC 4 - KERNEL TRICK (minh họa bằng dữ liệu hình học,"
-        " tách biệt khỏi bài toán ngôn ngữ)")
+P, D = primal_obj(w_svm, b_svm, X_train, y_train, C), dual_obj(alpha, w_svm)
+check("Đối ngẫu mạnh: Primal = Dual (gap < 5%)", (P - D) / abs(P) < 0.05,
+      f"P={P:.3f}, D={D:.3f}, gap={(P - D) / abs(P):.2%}")
 
-n2 = 80
-theta = np.random.uniform(0, 2 * np.pi, n2 // 2)
-r_in = np.random.normal(1.0, 0.1, n2 // 2)
-r_out = np.random.normal(3.0, 0.1, n2 // 2)
-X_in = np.stack([r_in * np.cos(theta), r_in * np.sin(theta)], axis=1)
-X_out = np.stack([r_out * np.cos(theta), r_out * np.sin(theta)], axis=1)
-X_circ = np.vstack([X_in, X_out])
-y_circ = np.hstack([np.ones(n2 // 2), -np.ones(n2 // 2)])
+c_sv, c_gd = cosine(w_svm, W["sklearn SVC"][0]), cosine(w_svm, gd.w)
+check("w của SMO cùng hướng w của sklearn SVC và của Primal/GD", c_sv > 0.95 and c_gd > 0.95,
+      f"cos = {c_sv:.4f} / {c_gd:.4f}")
 
-svm_lin_fail = SimpleSVM_SMO(C=1.0, kernel="linear", max_passes=20)
-svm_lin_fail.fit(X_circ, y_circ)
-acc_lin = np.mean(svm_lin_fail.predict(X_circ) == y_circ)
+agree = np.mean(svm.predict(X_test) == svc.predict(X_test))
+check("Dự đoán test của SMO trùng sklearn SVC >= 98%", agree >= 0.98, f"trùng {agree:.1%}")
 
-svm_rbf_ok = SimpleSVM_SMO(C=1.0, kernel="rbf", gamma=0.5, max_passes=20)
-svm_rbf_ok.fit(X_circ, y_circ)
-acc_rbf = np.mean(svm_rbf_ok.predict(X_circ) == y_circ)
+# Kernel trick: 2 vòng tròn đồng tâm (không tách tuyến tính được)
+th = np.random.uniform(0, 2 * np.pi, 40)
+ri, ro = np.random.normal(1, .1, 40), np.random.normal(3, .1, 40)
+Xc = np.vstack([np.c_[ri * np.cos(th), ri * np.sin(th)], np.c_[ro * np.cos(th), ro * np.sin(th)]])
+yc = np.hstack([np.ones(40), -np.ones(40)])
+acc = {}
+for k, m in [("linear", SimpleSVM_SMO(kernel="linear", max_passes=20)),
+             ("rbf", SimpleSVM_SMO(kernel="rbf", gamma=0.5, max_passes=20)),
+             ("sk-linear", SVC(kernel="linear")), ("sk-rbf", SVC(kernel="rbf", gamma=0.5))]:
+    acc[k] = np.mean(m.fit(Xc, yc).predict(Xc) == yc)
+check("Kernel trick: linear thất bại (<85%), RBF tách được (>95%), cả tự viết lẫn sklearn",
+      max(acc["linear"], acc["sk-linear"]) < 0.85 and min(acc["rbf"], acc["sk-rbf"]) > 0.95,
+      f"linear {acc['linear']:.2f}/{acc['sk-linear']:.2f} | rbf {acc['rbf']:.2f}/{acc['sk-rbf']:.2f} (tự viết/sklearn)")
 
-check("Linear kernel KHÔNG phân tách được dữ liệu vòng tròn (acc < 85%)",
-      acc_lin < 0.85, f"accuracy linear = {acc_lin:.4f}")
-check("RBF kernel phân tách được dữ liệu vòng tròn (acc > 95%)",
-      acc_rbf > 0.95, f"accuracy RBF = {acc_rbf:.4f}")
-
-
-# ================================================================
-# 5) BẢNG TỔNG KẾT TỐC ĐỘ
-# ================================================================
-section("BƯỚC 5 - TỔNG KẾT TỐC ĐỘ")
-
-print(f"\n{'Phương pháp':30s} | {'Thời gian (s)':>14s} | {'Chậm hơn LinearSVC':>20s}")
-print("-" * 70)
-for name, t in [
-    ("manual code - Dual/SMO", t_dual),
-    ("manual code - Primal/GD", t_primal),
-    ("scikit-learn - SVC(linear)", t_svc),
-    ("scikit-learn - LinearSVC", t_linsvc),
-]:
-    ratio = t / t_linsvc
-    print(f"{name:30s} | {t:14.4f} | {ratio:19.1f}x")
-
-
-# ================================================================
-# 6) TỔNG KẾT TEST
-# ================================================================
-section("TỔNG KẾT")
-n_pass = sum(1 for _, s in _results if s == "PASS")
-n_total = len(_results)
-print(f"\nBộ test logic: {n_pass}/{n_total} PASS")
-for name, status in _results:
-    if status == "FAIL":
-        print(f"  !! CẦN XEM LẠI: {name}")
+print(f"\n>>> {sum(_results)}/{len(_results)} PASS")
