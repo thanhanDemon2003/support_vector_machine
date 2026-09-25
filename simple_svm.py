@@ -1,10 +1,7 @@
 
 import numpy as np
 # numpy: chỉ dùng để biểu diễn vector/ma trận (x_i là vector trong R^d,
-# X là ma trận n×d). KHÔNG dùng bất kỳ hàm tối ưu có sẵn nào (không
-# scipy.optimize, không cvxopt) — mọi công thức cập nhật đều tự viết
-# từ đạo hàm/điều kiện KKT suy ra bằng tay.
-
+# X là ma trận n×d).
 
 # ================================================================
 # KERNEL FUNCTIONS

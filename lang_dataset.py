@@ -1,20 +1,7 @@
 """
 DATASET: TIẾNG VIỆT vs TIẾNG H'MÔNG (dùng từ vựng H'MÔNG THẬT)
 ==================================================================
-
-dùng syllable ngẫu nhiên mô phỏng nữa - 78 từ H'Mông dưới
-đây là từ THẬT (ib, ob, peb, koj, kuv, tsev kawm ntawv...), chỉ có
-việc GHÉP chúng thành "câu" là ngẫu nhiên (không đúng ngữ pháp), vì
-mục đích ở đây là tạo dữ liệu có ĐẶC TRƯNG KÝ TỰ (character n-gram)
-thật để SVM học, không phải tạo câu có nghĩa.
-
-CÁCH THÊM TỪ ĐIỂN MỚI:
-    Nếu thêm file JSON khác cùng schema (chunks[].content dạng
-    "Nhãn: Từ_Hmong, ..." hoặc "Nhãn là Từ_Hmong. ..."), gọi:
-        new_words = extract_hmong_vocab_from_json("path/to/file.json")
-    rồi thêm vào HMONG_WORDS bên dưới.
 """
-
 import json
 import re
 import numpy as np

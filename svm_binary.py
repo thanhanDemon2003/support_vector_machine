@@ -1,13 +1,3 @@
-"""
-DEMO SVM NHỊ PHÂN: TIẾNG VIỆT (+1) vs TIẾNG H'MÔNG (-1)   (bản log gọn)
-
-Chứng minh bản chất SVM bằng số liệu, đối chiếu code tự viết với scikit-learn:
-  - Ràng buộc Dual + điều kiện KKT + support vector thưa
-  - Đối ngẫu mạnh: giá trị Primal = giá trị Dual
-  - Nghiệm của code tự viết = nghiệm của thư viện
-  - Kernel trick: linear thất bại, RBF tách được
-Cần: simple_svm.py và lang_dataset.py
-"""
 import time
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
