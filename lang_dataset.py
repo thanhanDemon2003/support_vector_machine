@@ -1,22 +1,15 @@
-"""
-DATASET: TIẾNG VIỆT vs TIẾNG H'MÔNG (dùng từ vựng H'MÔNG THẬT)
-==================================================================
-"""
-import json
-import re
 import numpy as np
 import pandas as pd
 
 np.random.seed(42)
 
-
 # ================================================================
-# 1) TIẾNG VIỆT - từ vựng thật, phù hợp ngữ cảnh chatbot giáo dục
+# 1) TIẾNG VIỆT
 # ================================================================
 VI_WORDS = [
     "xin", "chào", "bạn", "tôi", "là", "học", "sinh", "lớp", "mấy",
     "hôm", "nay", "thế", "nào", "cảm", "ơn", "rất", "nhiều", "giúp",
-    "đỡ", "bài", "toán", "này", "khó", "quá", "giải", "thích", "cho",
+    "để", "bài", "toán", "này", "khó", "quá", "giải", "thích", "cho",
     "em", "hiểu", "được", "không", "câu", "hỏi", "về", "phép", "tính",
     "cộng", "trừ", "nhân", "chia", "số", "học", "tiếng", "việt", "văn",
     "đọc", "viết", "chữ", "cái", "trường", "thầy", "cô", "giáo", "bạn",
@@ -27,126 +20,70 @@ def make_vi_sentence(min_len=3, max_len=8):
     n = np.random.randint(min_len, max_len + 1)
     return " ".join(np.random.choice(VI_WORDS, n))
 
-
 # ================================================================
-# 2) TIẾNG H'MÔNG - PARSER trích từ vựng THẬT từ file JSON từ điển
+# 2) TIẾNG H'MÔNG
 # ================================================================
-_VN_META_MARKERS = ["Mông", "tiếng", "chủ đề", "Lưu ý", "đối chiếu",
-                     "ngữ pháp", "danh từ"]
-_NOISE_WORDS = {"hoặc", "uk"}
-
-
-def _clean_term(t):
-    """Bỏ phần trong ngoặc đơn (dạng thay thế), bỏ dấu nháy/dấu chấm/khoảng trắng thừa"""
-    t = re.sub(r"\s*\([^)]*\)", "", t)
-    t = t.strip().rstrip(".").strip()
-    return t.strip("'\" ")
-
-
-def _is_valid_hmong_term(t):
-    """Lọc bỏ các đoạn văn bản tiếng Việt lẫn vào do parser bắt nhầm"""
-    if not t or len(t) > 30:
-        return False
-    if any(marker in t for marker in _VN_META_MARKERS):
-        return False
-    if t.lower() in _NOISE_WORDS:
-        return False
-    return True
-
-
-def extract_hmong_vocab_from_json(json_path):
-    """
-    Đọc 1 file JSON từ điển (schema: {"chunks": [{"content": "..."}]})
-    và trích ra danh sách các TỪ H'MÔNG THẬT xuất hiện trong đó.
-
-    Hỗ trợ 2 định dạng câu thường gặp trong nội dung (content):
-        Định dạng A: "Nhãn tiếng Việt: Từ H'Mông, Nhãn khác: Từ khác, ..."
-        Định dạng B: "Nhãn tiếng Việt là Từ H'Mông. Nhãn khác là Từ khác. ..."
-    Cộng thêm: các từ đặt trong dấu nháy đơn 'xxx' (thường là từ chỉ loại).
-
-    Trả về: list các cụm từ H'Mông (có thể nhiều từ, ví dụ "Tsev kawm ntawv")
-    """
-    with open(json_path, encoding="utf-8") as f:
-        doc = json.load(f)
-
-    terms = []
-    for chunk in doc.get("chunks", []):
-        content = chunk.get("content", "")
-
-        # Định dạng A: tách theo dấu phẩy, lấy phần SAU dấu ':' cuối cùng
-        for seg in content.split(", "):
-            if ":" in seg:
-                terms.append(seg.rsplit(":", 1)[1])
-
-        # Định dạng B: tách theo dấu chấm, lấy phần SAU cụm ' là ' cuối cùng
-        for seg in content.split(". "):
-            if " là " in seg:
-                terms.append(seg.rsplit(" là ", 1)[1])
-
-        # Bonus: các từ trong dấu nháy đơn (ví dụ từ chỉ loại 'tus', 'lub')
-        terms.extend(re.findall(r"'([^']+)'", content))
-
-    cleaned = [_clean_term(t) for t in terms]
-    valid = [t for t in cleaned if _is_valid_hmong_term(t)]
-    return sorted(set(valid))
-
-
-def _phrases_to_word_pool(phrases):
-    """Tách các cụm từ nhiều-từ (vd 'Tsev kawm ntawv') thành các TỪ ĐƠN,
-    để dùng làm pool sinh câu ngẫu nhiên (giống cách VI_WORDS hoạt động)."""
-    tokens = set()
-    for phrase in phrases:
-        for tok in phrase.split():
-            tokens.add(tok.lower())
-    return sorted(tokens)
-
-
-# --- Trích xuất TỰ ĐỘNG từ 2 file JSON gốc của dự án (nếu có sẵn) ---
-_HMONG_JSON_PATHS = [
-    "/mnt/user-data/uploads/hmong_dictionary.json",
-    "/mnt/user-data/uploads/tu_vung_hmong.json",
+HMONG_WORDS = [
+    "ceg", "dab", "daim", "daj", "dawb", "dev", "dua", "dub", "faib",
+    "fwb", "ib", "kawm", "koj", "kuv", "kwv", "lej", "liab", "loj",
+    "lub", "me", "miv", "muab", "muag", "ncauj", "neeg", "nees",
+    "niam", "noog", "npaug", "npua", "ntau", "ntawv", "ntsej",
+    "ntsuab", "ntswg", "ntxhais", "ntxhuav", "ntxiv", "nyeem", "nyob",
+    "nyuj", "ob", "pab", "peb", "phau", "plab", "plaub", "pog",
+    "qaib", "qhov", "rab", "rho", "sau", "siab", "sib", "tau",
+    "taubhau", "tes", "tij", "tsaug", "tsev", "tsi", "tsib", "tsis",
+    "tub", "tus", "txhais", "txiv", "ua", "vog", "xav", "xiav",
+    "xib", "xim", "yawg", "yog", "zaj", "zoo",
 ]
-
-_hmong_phrases = []
-for _path in _HMONG_JSON_PATHS:
-    try:
-        _hmong_phrases.extend(extract_hmong_vocab_from_json(_path))
-    except FileNotFoundError:
-        pass  # file không có sẵn -> bỏ qua, dùng fallback bên dưới
-
-if _hmong_phrases:
-    HMONG_WORDS = _phrases_to_word_pool(_hmong_phrases)
-else:
-    # FALLBACK: nếu không tìm thấy file JSON (ví dụ chạy trên máy khác),
-    # dùng lại đúng 78 từ đã trích xuất sẵn từ 2 file gốc, hard-code tại
-    # đây để lang_dataset.py vẫn chạy được ĐỘC LẬP không cần file ngoài.
-    HMONG_WORDS = [
-        "ceg", "dab", "daim", "daj", "dawb", "dev", "dua", "dub", "faib",
-        "fwb", "ib", "kawm", "koj", "kuv", "kwv", "lej", "liab", "loj",
-        "lub", "me", "miv", "muab", "muag", "ncauj", "neeg", "nees",
-        "niam", "noog", "npaug", "npua", "ntau", "ntawv", "ntsej",
-        "ntsuab", "ntswg", "ntxhais", "ntxhuav", "ntxiv", "nyeem", "nyob",
-        "nyuj", "ob", "pab", "peb", "phau", "plab", "plaub", "pog",
-        "qaib", "qhov", "rab", "rho", "sau", "siab", "sib", "tau",
-        "taubhau", "tes", "tij", "tsaug", "tsev", "tsi", "tsib", "tsis",
-        "tub", "tus", "txhais", "txiv", "ua", "vog", "xav", "xiav",
-        "xib", "xim", "yawg", "yog", "zaj", "zoo",
-    ]
-
 
 def make_hmong_sentence(min_len=3, max_len=8):
     n = np.random.randint(min_len, max_len + 1)
     return " ".join(np.random.choice(HMONG_WORDS, n))
 
+# ================================================================
+# 3) TIẾNG Ê ĐÊ
+# ================================================================
+EDE_WORDS = [
+    "Klei", "bhian", "Bi", "mni", "Uă", "kâo", "Ơh", "Amâo", "Lač",
+    "Mgi", "Pap", "Ih", "Sang", "hră", "M'nŭm", "Mnuih", "hrăm",
+    "Nai", "pơtô", "Blŭk", "M'jăng", "Toán", "Yŭan", "Jăk", "Mlang",
+    "Prông", "Đĭêt", "Sa", "Dua", "Tlâo", "Pă", "Êma", "Khăp",
+    "amâo", "kơ", "diih", "jăk", "êdi", "ñu", "djiê", "rê", "đŏk"
+]
+
+def make_ede_sentence(min_len=3, max_len=8):
+    n = np.random.randint(min_len, max_len + 1)
+    return " ".join(np.random.choice(EDE_WORDS, n))
 
 # ================================================================
-# TẠO DATASET NHỊ PHÂN - đúng schema text/language như trainer.py
+# 4) TIẾNG THÁI
 # ================================================================
+THAI_WORDS = [
+    "สวัสดี", "ขอบคุณ", "ใช่", "ไม่", "ลาก่อน", "พูด", "เข้าใจ", 
+    "ภาษาไทย", "โรงเรียน", "ครู", "นักเรียน", "หนังสือ", "ดี", 
+    "ใหญ่", "เล็ก", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "รัก",
+    "กิน", "ข้าว", "น้ำ", "ไป", "มา", "นอน", "ดู", "ทำ", "อะไร"
+]
+
+def make_thai_sentence(min_len=3, max_len=8):
+    n = np.random.randint(min_len, max_len + 1)
+    return " ".join(np.random.choice(THAI_WORDS, n))
+
+# ================================================================
+# TẠO DATASET NHIỀU LỚP
+# ================================================================
+def build_language_dataset_4_langs(n_per_class=400):
+    rows = []
+    for _ in range(n_per_class):
+        rows.append({"text": make_vi_sentence(), "language": "vi"})
+        rows.append({"text": make_hmong_sentence(), "language": "hmn"})
+        rows.append({"text": make_ede_sentence(), "language": "ede"})
+        rows.append({"text": make_thai_sentence(), "language": "tha"})
+        
+    df = pd.DataFrame(rows).sample(frac=1.0, random_state=42).reset_index(drop=True)
+    return df
+
 def build_language_dataset(n_per_class=400):
-    """
-    Trả về DataFrame với 2 cột: 'text', 'language' ('vi' hoặc 'hmn'),
-    đã xáo trộn (shuffle) ngẫu nhiên.
-    """
     rows = []
     for _ in range(n_per_class):
         rows.append({"text": make_vi_sentence(), "language": "vi"})
@@ -154,14 +91,3 @@ def build_language_dataset(n_per_class=400):
         rows.append({"text": make_hmong_sentence(), "language": "hmn"})
     df = pd.DataFrame(rows).sample(frac=1.0, random_state=42).reset_index(drop=True)
     return df
-
-
-if __name__ == "__main__":
-    print(f"Số từ H'Mông trong pool: {len(HMONG_WORDS)}")
-    print(f"Nguồn: {'file JSON thật' if _hmong_phrases else 'fallback hard-code'}")
-    df = build_language_dataset(n_per_class=400)
-    print(df.head(10))
-    print("\nPhân bố lớp:")
-    print(df["language"].value_counts())
-    df.to_csv("/home/claude/language_dataset_vi_hmong.csv", index=False, encoding="utf-8")
-    print("\nĐã lưu: language_dataset_vi_hmong.csv")

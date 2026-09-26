@@ -1,4 +1,4 @@
-import time
+﻿import time
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
@@ -24,29 +24,28 @@ def cosine(a, b):
     return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
-def primal_obj(w, b, X, y, C):   # P = 1/2||w||^2 + C*sum hinge
+def primal_obj(w, b, X, y, C):
     return 0.5 * w @ w + C * np.maximum(0, 1 - y * (X @ w + b)).sum()
 
 
-def dual_obj(alpha, w):          # D = sum(alpha) - 1/2||w||^2
+def dual_obj(alpha, w):
     return alpha.sum() - 0.5 * w @ w
 
 
-# ---------------------------------------------------------------- 1. DỮ LIỆU
 header("1) DỮ LIỆU")
 N = 400
 texts = [make_vi_sentence() for _ in range(N)] + [make_hmong_sentence() for _ in range(N)]
 labels = np.array([1] * N + [-1] * N, dtype=float)
+
+
 tr, te, y_train, y_test = train_test_split(texts, labels, test_size=0.3,
                                            random_state=42, stratify=labels)
-# 150 chiều vì SMO tự viết dùng ma trận kernel n x n, không hỗ trợ sparse
 tfidf = TfidfVectorizer(analyzer="char", ngram_range=(2, 4), max_features=150, sublinear_tf=True)
 X_train, X_test = tfidf.fit_transform(tr).toarray(), tfidf.transform(te).toarray()
 n = len(y_train)
 print(f"  {len(texts)} câu (vi/hmong = {N}/{N}) -> train {n}, test {len(y_test)}, "
       f"{X_train.shape[1]} đặc trưng TF-IDF char 2-4gram")
 
-# ---------------------------------------------------------------- 2. SO SÁNH
 header("2) HUẤN LUYỆN & SO SÁNH (C = 1.0)")
 C = 1.0
 models, times = {}, {}
@@ -71,8 +70,8 @@ D_val = {"SMO tự viết (dual)": dual_obj(svm.alpha, w_svm),
          "sklearn SVC": dual_obj(alpha_svc, W["sklearn SVC"][0])}
 n_sv = {"SMO tự viết (dual)": len(svm.support_), "sklearn SVC": len(svc.support_)}
 
-t_ref = times["sklearn LinearSVC"]   # mốc so sánh tốc độ
-print(f"  {'Mô hình':22s}|{'Fit (s)':>8s} |{'x LinearSVC':>12s} |{'Acc test':>9s} |{'||w||':>7s} |{'Primal P':>9s} |{'Dual D':>8s} |{'#SV':>4s}")
+t_ref = times["sklearn LinearSVC"]
+print(f"  {'Mô hình':22s}|{'Fit (s)':>8s} |{'x LinearSVC':>12s} |{'Acc test':>9s} |{'||w||':>7s} |{'Primal P':>9s} |{'Dual D':>8s} |{'#SV':>5s}")
 print("  " + "-" * 91)
 for name, m in models.items():
     w, b = W[name]
@@ -82,7 +81,6 @@ for name, m in models.items():
           f"{np.linalg.norm(w):7.3f} |{primal_obj(w, b, X_train, y_train, C):9.3f} |{d} |{sv}")
 print("  (LinearSVC tối ưu squared-hinge nên P theo hinge cao hơn - bình thường)")
 
-# ---------------------------------------------------------------- 3. KIỂM CHỨNG
 header("3) KIỂM CHỨNG")
 alpha, y = svm.alpha, y_train
 
@@ -90,7 +88,7 @@ check("Ràng buộc Dual: 0 <= alpha <= C  và  sum(alpha*y) = 0",
       alpha.min() >= -1e-9 and alpha.max() <= C + 1e-9 and abs(np.sum(alpha * y)) < 1e-6,
       f"alpha in [{max(alpha.min(), 0):.2g}, {alpha.max():.2g}], sum(alpha*y) = {np.sum(alpha * y):.1e}")
 
-eps, viol = 0.15, 0     # KKT: alpha=0 -> y*f>=1 ; 0<alpha<C -> y*f=1 ; alpha=C -> y*f<=1
+eps, viol = 0.15, 0
 for i in range(n):
     m = y[i] * svm._decision_raw(i)
     ok = (m >= 1 - eps) if alpha[i] < 1e-6 else (m <= 1 + eps) if alpha[i] > C - 1e-6 else abs(m - 1) <= eps
@@ -111,7 +109,6 @@ check("w của SMO cùng hướng w của sklearn SVC và của Primal/GD", c_sv
 agree = np.mean(svm.predict(X_test) == svc.predict(X_test))
 check("Dự đoán test của SMO trùng sklearn SVC >= 98%", agree >= 0.98, f"trùng {agree:.1%}")
 
-# Kernel trick: 2 vòng tròn đồng tâm (không tách tuyến tính được)
 th = np.random.uniform(0, 2 * np.pi, 40)
 ri, ro = np.random.normal(1, .1, 40), np.random.normal(3, .1, 40)
 Xc = np.vstack([np.c_[ri * np.cos(th), ri * np.sin(th)], np.c_[ro * np.cos(th), ro * np.sin(th)]])
@@ -126,3 +123,6 @@ check("Kernel trick: linear thất bại (<85%), RBF tách được (>95%), cả
       f"linear {acc['linear']:.2f}/{acc['sk-linear']:.2f} | rbf {acc['rbf']:.2f}/{acc['sk-rbf']:.2f} (tự viết/sklearn)")
 
 print(f"\n>>> {sum(_results)}/{len(_results)} PASS")
+
+
+
